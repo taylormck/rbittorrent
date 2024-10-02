@@ -1,4 +1,5 @@
-use serde_json;
+// use hex::encode;
+// use serde_json;
 use std::env;
 
 // Available if you need it!
@@ -8,30 +9,56 @@ use std::env;
 fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
     let mut encoded_chars = encoded_value.chars().peekable();
 
-    if let Some(first_char) = encoded_chars.peek() {
+    if let Some(first_char) = encoded_chars.next() {
         return match first_char {
-            // If encoded_value starts with a digit, it's a number
-            d if d.is_digit(10) => {
-                // Example: "5:hello" -> "hello"
-                let colon_index = encoded_value.find(':').unwrap();
-                let number_string = &encoded_value[..colon_index];
-                let number = number_string.parse::<i64>().unwrap();
-                let string = &encoded_value[colon_index + 1..colon_index + 1 + number as usize];
-
-                serde_json::Value::String(string.to_string())
-            }
-            'i' => {
-                // Skip the 'i'
-                encoded_chars.next();
-
-                let mut digits = encoded_chars.collect::<String>();
-                if !digits.ends_with("e") {
-                    panic!("Integer value did not end with 'e'");
+            // NOTE: strings have the format "{length}:{content}", for example: "5:hello"
+            d if d.is_ascii_digit() => {
+                let mut length_digits = vec![d];
+                for c in encoded_chars.by_ref() {
+                    match c {
+                        c if c.is_ascii_digit() => length_digits.push(c),
+                        ':' => break,
+                        c => panic!("Unexpected character in string length: {}", c),
+                    }
                 }
 
-                digits.pop();
+                let string_length = length_digits
+                    .into_iter()
+                    .collect::<String>()
+                    .parse::<i64>()
+                    .unwrap();
 
-                digits.parse().expect("Not a valid number")
+                let mut string_chars = vec![];
+
+                for _ in 0..string_length {
+                    let c = encoded_chars
+                        .next()
+                        .expect("Unexpected end of content while reading string");
+                    string_chars.push(c);
+                }
+
+                serde_json::Value::String(string_chars.into_iter().collect::<String>())
+
+                // Example: "5:hello" -> "hello"
+                // let colon_index = encoded_value.find(':').unwrap();
+                // let number_string = &encoded_value[..colon_index];
+                // let number = number_string.parse::<i64>().unwrap();
+                // let string = &encoded_value[colon_index + 1..colon_index + 1 + number as usize];
+                //
+                // serde_json::Value::String(string.to_string())
+            }
+            'i' => {
+                let mut digits = vec![];
+
+                for c in encoded_chars {
+                    match c {
+                        c if c.is_ascii_digit() => digits.push(c),
+                        'e' => break,
+                        _ => panic!("Unexpected character in integer"),
+                    }
+                }
+
+                digits.into_iter().collect::<String>().parse().unwrap()
             }
             _ => {
                 panic!("Unhandled encoded value: {}", encoded_value);
