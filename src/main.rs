@@ -1,14 +1,17 @@
 // use hex::encode;
 // use serde_json;
-use std::env;
+use std::{env, iter::Peekable, str::Chars};
 
 // Available if you need it!
 // use serde_bencode
 
-#[allow(dead_code)]
 fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
     let mut encoded_chars = encoded_value.chars().peekable();
 
+    decode_next_bencoded_value(&mut encoded_chars)
+}
+
+fn decode_next_bencoded_value(encoded_chars: &mut Peekable<Chars>) -> serde_json::Value {
     if let Some(first_char) = encoded_chars.next() {
         return match first_char {
             // NOTE: strings have the format "{length}:{content}", for example: "5:hello"
@@ -60,8 +63,22 @@ fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
 
                 digits.into_iter().collect::<String>().parse().unwrap()
             }
-            _ => {
-                panic!("Unhandled encoded value: {}", encoded_value);
+            'l' => {
+                let mut result = vec![];
+
+                while let Some(c) = encoded_chars.peek() {
+                    if *c == 'e' {
+                        // Consume the e
+                        encoded_chars.next();
+                        break;
+                    }
+
+                    result.push(decode_next_bencoded_value(encoded_chars));
+                }
+                serde_json::Value::Array(result)
+            }
+            c => {
+                panic!("Unhandled encoded value: {}", c);
             }
         };
     }
