@@ -18,6 +18,8 @@ fn main() {
             println!("Tracker URL: {}", torrent.announce);
             println!("Length: {}", torrent.length);
             println!("Info Hash: {}", torrent.hash);
+            println!("Piece Length: {}", torrent.piece_length);
+            println!("Pieces: \n{}", torrent.piece_hashes.join("\n"));
         }
         _ => {
             println!("unknown command: {}", args[1])

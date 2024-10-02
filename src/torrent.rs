@@ -1,3 +1,4 @@
+use const_hex;
 use serde_bencode::value::Value as BValue;
 use sha1::{Digest, Sha1};
 use std::fs;
@@ -7,6 +8,8 @@ pub struct Torrent {
     pub announce: String,
     pub length: i64,
     pub hash: String,
+    pub piece_length: i64,
+    pub piece_hashes: Vec<String>,
 }
 
 impl Torrent {
@@ -39,6 +42,18 @@ impl Torrent {
             _ => panic!("Torrent file does not contain length entry."),
         };
 
+        let piece_length = match info.get("piece length".as_bytes()) {
+            Some(BValue::Int(len)) => *len,
+            _ => panic!("Torrent file does not contain piece length entry."),
+        };
+
+        let pieces = match info.get("pieces".as_bytes()) {
+            Some(BValue::Bytes(bytes)) => bytes,
+            _ => panic!("Torrent file does not contain pieces entry."),
+        };
+
+        let piece_hashes = pieces.chunks(20).map(const_hex::encode).collect();
+
         let encoded_info = serde_bencode::to_bytes(&BValue::Dict(info.clone()))?;
 
         let hash = calculate_hash(&encoded_info);
@@ -47,6 +62,8 @@ impl Torrent {
             announce,
             length,
             hash,
+            piece_length,
+            piece_hashes,
         })
     }
 }
@@ -63,7 +80,7 @@ mod tests {
 
     #[test]
     fn test_new_torrent_from_bytes() {
-        let input_info = "d6:lengthi420ee";
+        let input_info = "d6:lengthi420e12:piece lengthi512e6:pieces20:01234567890123456789e";
         let expected_hash = calculate_hash(input_info.as_bytes());
         let input = format!("d8:announce8:fake_url4:info{}e", input_info);
 
@@ -71,6 +88,8 @@ mod tests {
             announce: "fake_url".to_string(),
             length: 420_i64,
             hash: expected_hash,
+            piece_length: 512,
+            piece_hashes: vec!["3031323334353637383930313233343536373839".to_string()],
         };
 
         let actual_torrent = Torrent::new(input.as_bytes()).unwrap();
