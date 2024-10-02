@@ -1,3 +1,4 @@
+use serde_json;
 use std::{iter::Peekable, str::Chars};
 
 pub fn decode(encoded_value: &str) -> serde_json::Value {
