@@ -2,7 +2,7 @@ use crate::bencode;
 use serde_json;
 use std::fs;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Torrent {
     pub announce: String,
     pub length: u64,
@@ -11,8 +11,12 @@ pub struct Torrent {
 impl Torrent {
     pub fn from_file(path: &str) -> Self {
         let contents = fs::read(path).expect("Failed to read file.");
-        let contents = contents.into_iter().map(|c| c as char).collect::<String>();
-        let dict = bencode::decode(&contents);
+
+        Self::new(&contents)
+    }
+
+    pub fn new<'a>(contents: impl IntoIterator<Item = &'a u8>) -> Self {
+        let dict = bencode::decode(contents);
 
         let data = match dict {
             serde_json::Value::Object(dict) => dict,
@@ -37,5 +41,23 @@ impl Torrent {
         };
 
         Self { announce, length }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_torrent_from_bytes() {
+        let input = "d8:announce8:fake_url4:infod6:lengthi420eee";
+        let expected_torrent = Torrent {
+            announce: "fake_url".to_string(),
+            length: 420_u64,
+        };
+
+        let actual_torrent = Torrent::new(input.as_bytes());
+
+        assert_eq!(expected_torrent, actual_torrent);
     }
 }

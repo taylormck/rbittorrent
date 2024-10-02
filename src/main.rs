@@ -9,7 +9,7 @@ fn main() {
     match command.as_str() {
         "decode" => {
             let encoded_value = &args[2];
-            let decoded_value = bencode::decode(encoded_value);
+            let decoded_value = bencode::decode(encoded_value.as_bytes());
             println!("{}", decoded_value);
         }
         "info" => {
