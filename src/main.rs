@@ -14,9 +14,10 @@ fn main() {
         }
         "info" => {
             let file_path = &args[2];
-            let torrent = torrent::Torrent::from_file(file_path);
+            let torrent = torrent::Torrent::from_file(file_path).unwrap();
             println!("Tracker URL: {}", torrent.announce);
             println!("Length: {}", torrent.length);
+            println!("Info Hash: {}", torrent.hash);
         }
         _ => {
             println!("unknown command: {}", args[1])

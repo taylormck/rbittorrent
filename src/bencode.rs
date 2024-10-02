@@ -1,3 +1,6 @@
+// NOTE: This file is currently unused, replaced by serde_bencode.
+// Maybe I'll go back and implement it correctly later.
+
 use serde_json;
 use std::iter::Peekable;
 
@@ -108,29 +111,31 @@ fn decode_next_bencoded_value(
     panic!("No value to decode");
 }
 
-pub fn encode(val: serde_json::Value) -> String {
+pub fn encode(val: serde_json::Value) -> Vec<u8> {
     match val {
-        serde_json::Value::String(s) => format!("{}:{}", s.len(), s),
-        serde_json::Value::Number(n) => format!("i{}e", n),
-        serde_json::Value::Array(a) => {
-            format!(
-                "l{}e",
-                a.into_iter().map(encode).collect::<Vec<_>>().join("")
-            )
-        }
-        serde_json::Value::Object(o) => {
-            format!(
-                "d{}e",
-                o.into_iter()
-                    .map(|(key, val)| format!(
-                        "{}{}",
-                        encode(serde_json::Value::String(key)),
-                        encode(val)
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("")
-            )
-        }
+        serde_json::Value::String(s) => format!("{}:{}", s.len(), s).into(),
+        serde_json::Value::Number(n) => format!("i{}e", n).into(),
+        serde_json::Value::Array(a) => format!(
+            "l{}e",
+            a.into_iter()
+                .flat_map(encode)
+                .map(|b| b as char)
+                .collect::<String>()
+        )
+        .into(),
+        serde_json::Value::Object(o) => format!(
+            "d{}e",
+            o.into_iter()
+                .map(
+                    |(key, val)| vec![encode(serde_json::Value::String(key)), encode(val)]
+                        .into_iter()
+                        .flatten()
+                )
+                .flatten()
+                .map(|b| b as char)
+                .collect::<String>()
+        )
+        .into(),
         _ => panic!("Tried to encode unsupported value type."),
     }
 }
@@ -194,33 +199,46 @@ mod tests {
     fn test_encode_string() {
         assert_eq!(
             encode(serde_json::Value::String("hello".to_string())),
-            "5:hello"
+            "5:hello".as_bytes()
         );
 
         assert_eq!(
             encode(serde_json::Value::String("foo".to_string())),
-            "3:foo"
+            "3:foo".as_bytes()
         );
 
-        assert_eq!(encode(serde_json::Value::String("".to_string())), "0:");
+        assert_eq!(
+            encode(serde_json::Value::String("".to_string())),
+            "0:".as_bytes()
+        );
+        assert_eq!(
+            encode(serde_json::Value::String("\x00".to_string())),
+            vec![b'1', b':', b'\x00'],
+        );
     }
 
     #[test]
     fn test_encode_integer() {
-        assert_eq!(encode(serde_json::Value::Number(420.into())), "i420e");
-        assert_eq!(encode(serde_json::Value::Number((-69).into())), "i-69e");
+        assert_eq!(
+            encode(serde_json::Value::Number(420.into())),
+            "i420e".as_bytes()
+        );
+        assert_eq!(
+            encode(serde_json::Value::Number((-69).into())),
+            "i-69e".as_bytes()
+        );
     }
 
     #[test]
     fn test_encode_list() {
-        assert_eq!("le", encode(serde_json::Value::Array(vec![])));
+        assert_eq!("le".as_bytes(), encode(serde_json::Value::Array(vec![])));
 
         let input = vec![
             serde_json::Value::Number(420.into()),
             serde_json::Value::String("hello".to_string()),
         ];
 
-        let expected = "li420e5:helloe";
+        let expected = "li420e5:helloe".as_bytes();
 
         assert_eq!(expected, encode(serde_json::Value::Array(input)));
     }
@@ -229,21 +247,21 @@ mod tests {
     fn test_encode_dictionary() {
         let mut input = serde_json::Map::new();
 
-        let expected = "de";
+        let expected = "de".as_bytes();
         let actual = encode(serde_json::Value::Object(input.clone()));
         assert_eq!(expected, actual);
 
         input.insert("foo".into(), "bar".into());
         input.insert("baz".into(), 69.into());
 
-        let expected = "d3:bazi69e3:foo3:bare";
+        let expected = "d3:bazi69e3:foo3:bare".as_bytes();
         let actual = encode(serde_json::Value::Object(input.clone()));
         assert_eq!(expected, actual);
 
         input.insert("a".into(), "first".into());
         input.insert("z".into(), "last".into());
 
-        let expected = "d1:a5:first3:bazi69e3:foo3:bar1:z4:laste";
+        let expected = "d1:a5:first3:bazi69e3:foo3:bar1:z4:laste".as_bytes();
         let actual = encode(serde_json::Value::Object(input));
         assert_eq!(expected, actual);
     }
