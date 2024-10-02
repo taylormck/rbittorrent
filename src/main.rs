@@ -53,6 +53,14 @@ fn decode_next_bencoded_value(encoded_chars: &mut Peekable<Chars>) -> serde_json
             'i' => {
                 let mut digits = vec![];
 
+                // NOTE: We only want to allow the `-` at the beginning of the integer.
+                if let Some(c) = encoded_chars.peek() {
+                    if *c == '-' {
+                        digits.push('-');
+                        encoded_chars.next();
+                    }
+                }
+
                 for c in encoded_chars {
                     match c {
                         c if c.is_ascii_digit() => digits.push(c),
