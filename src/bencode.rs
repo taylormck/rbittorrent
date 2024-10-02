@@ -108,6 +108,33 @@ fn decode_next_bencoded_value(
     panic!("No value to decode");
 }
 
+pub fn encode(val: serde_json::Value) -> String {
+    match val {
+        serde_json::Value::String(s) => format!("{}:{}", s.len(), s),
+        serde_json::Value::Number(n) => format!("i{}e", n),
+        serde_json::Value::Array(a) => {
+            format!(
+                "l{}e",
+                a.into_iter().map(encode).collect::<Vec<_>>().join("")
+            )
+        }
+        serde_json::Value::Object(o) => {
+            format!(
+                "d{}e",
+                o.into_iter()
+                    .map(|(key, val)| format!(
+                        "{}{}",
+                        encode(serde_json::Value::String(key)),
+                        encode(val)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("")
+            )
+        }
+        _ => panic!("Tried to encode unsupported value type."),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,5 +188,63 @@ mod tests {
             decode("de".as_bytes()),
             serde_json::Value::Object(expected_map)
         );
+    }
+
+    #[test]
+    fn test_encode_string() {
+        assert_eq!(
+            encode(serde_json::Value::String("hello".to_string())),
+            "5:hello"
+        );
+
+        assert_eq!(
+            encode(serde_json::Value::String("foo".to_string())),
+            "3:foo"
+        );
+
+        assert_eq!(encode(serde_json::Value::String("".to_string())), "0:");
+    }
+
+    #[test]
+    fn test_encode_integer() {
+        assert_eq!(encode(serde_json::Value::Number(420.into())), "i420e");
+        assert_eq!(encode(serde_json::Value::Number((-69).into())), "i-69e");
+    }
+
+    #[test]
+    fn test_encode_list() {
+        assert_eq!("le", encode(serde_json::Value::Array(vec![])));
+
+        let input = vec![
+            serde_json::Value::Number(420.into()),
+            serde_json::Value::String("hello".to_string()),
+        ];
+
+        let expected = "li420e5:helloe";
+
+        assert_eq!(expected, encode(serde_json::Value::Array(input)));
+    }
+
+    #[test]
+    fn test_encode_dictionary() {
+        let mut input = serde_json::Map::new();
+
+        let expected = "de";
+        let actual = encode(serde_json::Value::Object(input.clone()));
+        assert_eq!(expected, actual);
+
+        input.insert("foo".into(), "bar".into());
+        input.insert("baz".into(), 69.into());
+
+        let expected = "d3:bazi69e3:foo3:bare";
+        let actual = encode(serde_json::Value::Object(input.clone()));
+        assert_eq!(expected, actual);
+
+        input.insert("a".into(), "first".into());
+        input.insert("z".into(), "last".into());
+
+        let expected = "d1:a5:first3:bazi69e3:foo3:bar1:z4:laste";
+        let actual = encode(serde_json::Value::Object(input));
+        assert_eq!(expected, actual);
     }
 }
