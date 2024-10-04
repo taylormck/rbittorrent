@@ -126,12 +126,11 @@ pub fn encode(val: serde_json::Value) -> Vec<u8> {
         serde_json::Value::Object(o) => format!(
             "d{}e",
             o.into_iter()
-                .map(
+                .flat_map(
                     |(key, val)| vec![encode(serde_json::Value::String(key)), encode(val)]
                         .into_iter()
                         .flatten()
                 )
-                .flatten()
                 .map(|b| b as char)
                 .collect::<String>()
         )

@@ -1,4 +1,3 @@
-use const_hex;
 use serde_bencode::value::Value as BValue;
 use sha1::{Digest, Sha1};
 use std::fs;
