@@ -104,15 +104,13 @@ pub fn shake_hands(peer: SocketAddrV4, torrent: &Torrent) -> Result<String> {
         Err(err) => anyhow::bail!(err),
     }
 
-    // let response = buffer.into_iter().map(|b| b as char).collect::<String>();
-
     Ok(hex::encode(&buffer[48..68]))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::{collections::HashMap, str::FromStr};
 
     #[test]
     fn test_fetch_peers() {
@@ -181,4 +179,37 @@ mod tests {
         mock.assert();
         assert_eq!(expected_peers, actual_peers);
     }
+
+    // #[test]
+    // fn test_shake_hands() {
+    //     let mut server = mockito::Server::new();
+    //     let ip = SocketAddrV4::from_str(&server.url());
+    //
+    //     let torrent = Torrent {
+    //         announce: format!("{}/announce", server.url()),
+    //         length: 1337,
+    //         hash: "00010203040506070809".to_string(),
+    //         piece_length: 0,
+    //         piece_hashes: Vec::<String>::new(),
+    //     };
+    //
+    //     let mut handshake = Vec::<u8>::new();
+    //
+    //     // Standard header
+    //     handshake.push(u8::to_be(19));
+    //     handshake.extend_from_slice(b"BitTorrent protocol");
+    //
+    //     // Placeholder bytes
+    //     handshake.extend_from_slice(&[0_u8; 8]);
+    //
+    //     // Hash
+    //     let hash = hex::decode(&torrent.hash).unwrap();
+    //     handshake.extend_from_slice(&hash);
+    //
+    //     // Peer ID
+    //     let peer_id = "00112233445566778899";
+    //     handshake.extend_from_slice(peer_id.as_bytes());
+    //
+    //     todo!();
+    // }
 }
