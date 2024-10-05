@@ -1,5 +1,5 @@
 use bittorrent_starter_rust::{bencode, peers, Torrent};
-use std::{env, net::SocketAddrV4, str::FromStr};
+use std::{env, net::SocketAddrV4, net::TcpStream, str::FromStr};
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() {
@@ -33,7 +33,8 @@ fn main() {
             let torrent = Torrent::from_file(file_path).unwrap();
 
             let peer_ip = SocketAddrV4::from_str(&args[3]).unwrap();
-            let result = peers::shake_hands(peer_ip, &torrent).unwrap();
+            let mut stream = TcpStream::connect(peer_ip).unwrap();
+            let result = peers::shake_hands(&mut stream, &torrent).unwrap();
 
             println!("Peer ID: {}", result);
         }
