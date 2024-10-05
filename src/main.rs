@@ -66,13 +66,17 @@ fn main() {
             println!("Peer ID: {}", result);
         }
         Commands::DownloadPiece {
-            output_path,
+            output_path: _output_path,
             file_path,
-            piece_index,
+            piece_index: _piece_index,
         } => {
-            println!("output_path: {:?}", output_path);
-            println!("file_path: {}", file_path);
-            println!("piece_index: {}", piece_index);
+            let torrent = Torrent::from_file(file_path).unwrap();
+            let torrent_peers = peers::fetch_peers(&torrent).unwrap();
+            let peer_ip = torrent_peers[0];
+
+            let mut stream = TcpStream::connect(peer_ip).unwrap();
+            peers::shake_hands(&mut stream, &torrent).unwrap();
+
             todo!();
         }
     }
