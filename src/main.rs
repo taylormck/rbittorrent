@@ -1,5 +1,5 @@
-use bittorrent_starter_rust::{bencode, peers::fetch_peers, Torrent};
-use std::env;
+use bittorrent_starter_rust::{bencode, peers, Torrent};
+use std::{env, net::SocketAddrV4, str::FromStr};
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() {
@@ -24,9 +24,18 @@ fn main() {
         "peers" => {
             let file_path = &args[2];
             let torrent = Torrent::from_file(file_path).unwrap();
-            let peers = fetch_peers(&torrent).unwrap();
+            let torrent_peers = peers::fetch_peers(&torrent).unwrap();
 
-            peers.iter().for_each(|peer| println!("{}", peer));
+            torrent_peers.iter().for_each(|peer| println!("{}", peer));
+        }
+        "handshake" => {
+            let file_path = &args[2];
+            let torrent = Torrent::from_file(file_path).unwrap();
+
+            let peer_ip = SocketAddrV4::from_str(&args[3]).unwrap();
+            let result = peers::shake_hands(peer_ip, &torrent).unwrap();
+
+            println!("Peer ID: {}", result);
         }
         _ => {
             println!("unknown command: {}", args[1])

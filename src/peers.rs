@@ -1,9 +1,12 @@
-use crate::{IpAddress, Torrent};
+use crate::Torrent;
 use anyhow::Result;
 use serde_bencode::value::Value as BValue;
-use std::io::Read;
+use std::{
+    io::{Read, Write},
+    net::{Ipv4Addr, SocketAddrV4, TcpStream},
+};
 
-pub fn fetch_peers(torrent: &Torrent) -> Result<Vec<IpAddress>> {
+pub fn fetch_peers(torrent: &Torrent) -> Result<Vec<SocketAddrV4>> {
     // This may look scary, but all it does is stick a '%' in between
     // every pair of characters.
     let info_hash = prepare_hash(&torrent.hash);
@@ -44,13 +47,20 @@ pub fn fetch_peers(torrent: &Torrent) -> Result<Vec<IpAddress>> {
     Ok(peers
         .chunks(6)
         .map(|chunk| {
-            let mut peer = [0; 6];
-            peer.clone_from_slice(chunk);
-            IpAddress::from_bytes(&peer)
+            let mut address = [0u8; 4];
+            address.clone_from_slice(&chunk[0..4]);
+
+            let mut port = [0u8; 2];
+            port.clone_from_slice(&chunk[4..6]);
+
+            SocketAddrV4::new(Ipv4Addr::from(address), u16::from_be_bytes(port))
         })
         .collect())
 }
 
+// NOTE: this could be made slightly more efficient if we only encoded
+// the characters that _need_ to be encoded. Right now, it encodes
+// every pair of characters by default.
 fn prepare_hash(hash: &str) -> String {
     hash.chars()
         .enumerate()
@@ -60,6 +70,43 @@ fn prepare_hash(hash: &str) -> String {
                 .chain(std::iter::once(c))
         })
         .collect::<String>()
+}
+
+pub fn shake_hands(peer: SocketAddrV4, torrent: &Torrent) -> Result<String> {
+    let mut handshake = Vec::<u8>::new();
+
+    // Standard header
+    handshake.push(u8::to_be(19));
+    handshake.extend_from_slice(b"BitTorrent protocol");
+
+    // Placeholder bytes
+    handshake.extend_from_slice(&[0_u8; 8]);
+
+    // Hash
+    let hash = hex::decode(&torrent.hash)?;
+    handshake.extend_from_slice(&hash);
+
+    // Peer ID
+    handshake.extend_from_slice("00112233445566778899".as_bytes());
+
+    let mut buffer = [0_u8; 68];
+    let mut stream = TcpStream::connect(peer)?;
+
+    match stream.write(&handshake) {
+        Ok(68) => {}
+        Ok(num) => anyhow::bail!("Sent {} bytes, expected 68", num),
+        Err(err) => anyhow::bail!(err),
+    }
+
+    match stream.read(&mut buffer) {
+        Ok(68) => {}
+        Ok(num) => anyhow::bail!("Received {} bytes, expected 68", num),
+        Err(err) => anyhow::bail!(err),
+    }
+
+    // let response = buffer.into_iter().map(|b| b as char).collect::<String>();
+
+    Ok(hex::encode(&buffer[48..68]))
 }
 
 #[cfg(test)]
@@ -80,23 +127,20 @@ mod tests {
         };
 
         let expected_peers = vec![
-            IpAddress {
-                address: [161, 35, 46, 221],
-                port: 51414,
-            },
-            IpAddress {
-                address: [159, 65, 84, 183],
-                port: 51444,
-            },
-            IpAddress {
-                address: [167, 172, 57, 188],
-                port: 51413,
-            },
+            SocketAddrV4::new(Ipv4Addr::new(161, 35, 46, 221), 51414),
+            SocketAddrV4::new(Ipv4Addr::new(159, 65, 84, 183), 51444),
+            SocketAddrV4::new(Ipv4Addr::new(167, 172, 57, 188), 51413),
         ];
 
         let encoded_expected_peers = expected_peers
             .iter()
-            .flat_map(|ip| ip.to_bytes())
+            .flat_map(|peer| {
+                let mut bytes = [0_u8; 6];
+                bytes[0..4].clone_from_slice(&peer.ip().octets().map(u8::to_be));
+                bytes[4..6].clone_from_slice(&peer.port().to_be_bytes());
+
+                bytes
+            })
             .collect::<Vec<u8>>();
 
         let mut response_dict = HashMap::new();
