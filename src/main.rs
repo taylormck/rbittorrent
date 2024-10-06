@@ -1,6 +1,13 @@
-use bittorrent_starter_rust::{bencode, peers, Torrent};
+use bittorrent_starter_rust::{
+    bencode,
+    peers::{self, PeerMessage},
+    Torrent,
+};
 use clap::{Parser, Subcommand};
-use std::net::TcpStream;
+use tokio::{
+    // io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
 
 #[derive(Clone, Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -11,6 +18,7 @@ struct Cli {
 }
 
 #[derive(Clone, Debug, Subcommand)]
+#[clap(rename_all = "snake_case")]
 enum Commands {
     Decode {
         encoded_value: String,
@@ -25,7 +33,6 @@ enum Commands {
         file_path: String,
         peer_ip: String,
     },
-    #[command(name = "download_piece")]
     DownloadPiece {
         #[arg(short, long = "out")]
         output_path: Option<String>,
@@ -35,7 +42,8 @@ enum Commands {
 }
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
@@ -60,10 +68,21 @@ fn main() {
         Commands::Handshake { file_path, peer_ip } => {
             let torrent = Torrent::from_file(file_path).unwrap();
 
-            let mut stream = TcpStream::connect(peer_ip).unwrap();
-            let result = peers::shake_hands(&mut stream, &torrent).unwrap();
+            let mut stream = match TcpStream::connect(peer_ip).await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    eprintln!("Error connecting to peer: {}", err);
+                    std::process::exit(1);
+                }
+            };
 
-            println!("Peer ID: {}", result);
+            match peers::shake_hands(&mut stream, &torrent).await {
+                Ok(result) => println!("Peer ID: {}", result),
+                Err(err) => {
+                    eprintln!("Error shaking hands: {}", err);
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::DownloadPiece {
             output_path: _output_path,
@@ -74,10 +93,24 @@ fn main() {
             let torrent_peers = peers::fetch_peers(&torrent).unwrap();
             let peer_ip = torrent_peers[0];
 
-            let mut stream = TcpStream::connect(peer_ip).unwrap();
-            peers::shake_hands(&mut stream, &torrent).unwrap();
+            let mut stream = match TcpStream::connect(peer_ip).await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    eprintln!("Error connecting to peer: {}", err);
+                    std::process::exit(1);
+                }
+            };
 
-            todo!();
+            println!("Handshake completed with peer: {}", peer_ip);
+
+            while let Ok(message) = PeerMessage::read(&mut stream).await {
+                println!("Message received: {:?}", message);
+
+                if let Err(err) = message.process(&mut stream).await {
+                    eprintln!("Error processing message: {}", err);
+                    std::process::exit(1);
+                }
+            }
         }
     }
 }

@@ -1,45 +1,48 @@
 use anyhow::Result;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::io::{Read, Write};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod bitfield;
 
+#[derive(Clone, Debug)]
 pub struct PeerMessage {
     id: PeerMessageId,
     payload: Vec<u8>,
 }
 
 impl PeerMessage {
-    pub fn read(stream: &mut (impl Read + Write)) -> Result<Self> {
+    pub async fn read(stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<Self> {
         let mut length_buffer = [0_u8; 4];
-        stream.read_exact(&mut length_buffer)?;
+        stream.read_exact(&mut length_buffer).await?;
 
         let length = u32::from_be_bytes(length_buffer);
 
         let mut id_buffer = [0_u8; 1];
-        stream.read_exact(&mut id_buffer)?;
+        stream.read_exact(&mut id_buffer).await?;
         let id = u8::from_be_bytes(id_buffer);
         let id = PeerMessageId::try_from(id)?;
 
         let mut payload = vec![0; length as usize];
-        stream.read_exact(&mut payload)?;
+        stream.read_exact(&mut payload).await?;
 
         Ok(Self { id, payload })
     }
 
-    pub fn send(&self, stream: &mut (impl Read + Write)) -> Result<()> {
+    pub async fn send(&self, stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<()> {
+        dbg!("Sending message: {:?}", self);
+
         let mut body = Vec::<u8>::new();
-        body.clone_from_slice(&self.payload.len().to_be_bytes());
+        let length = self.payload.len() as u32;
+        body.extend_from_slice(&length.to_be_bytes());
 
         let id: u8 = self.id.into();
         body.push(id.to_be());
-        body.clone_from_slice(&self.payload);
+        body.extend_from_slice(&self.payload);
 
-        stream.write_all(&body)?;
-        Ok(())
+        Ok(stream.write_all(&body).await?)
     }
 
-    pub fn process(&self, stream: &mut (impl Read + Write)) -> Result<()> {
+    pub async fn process(&self, stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<()> {
         match self.id {
             PeerMessageId::Bitfield => {
                 bitfield::process(self)?;
@@ -48,7 +51,7 @@ impl PeerMessage {
                     payload: Vec::new(),
                 };
 
-                interested_message.send(stream)
+                interested_message.send(stream).await
             }
             PeerMessageId::Unchoke => {
                 // TODO: break the desired piece into separate blocks and send a
