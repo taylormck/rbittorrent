@@ -1,8 +1,7 @@
+use crate::FileInfo;
 use anyhow::Result;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
-mod bitfield;
 
 #[derive(Clone, Debug)]
 pub struct PeerMessage {
@@ -42,10 +41,13 @@ impl PeerMessage {
         Ok(stream.write_all(&body).await?)
     }
 
-    pub async fn process(&self, stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<()> {
+    pub async fn process(
+        &self,
+        stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
+        file_info: &mut FileInfo,
+    ) -> Result<()> {
         match self.id {
             PeerMessageId::Bitfield => {
-                bitfield::process(self)?;
                 let interested_message = PeerMessage {
                     id: PeerMessageId::Interested,
                     payload: Vec::new(),
@@ -54,12 +56,35 @@ impl PeerMessage {
                 interested_message.send(stream).await
             }
             PeerMessageId::Unchoke => {
-                // TODO: break the desired piece into separate blocks and send a
-                // request message for each one.
-                todo!();
+                // TODO: we might want to limit these to ~5 at a time.
+                for piece in &file_info.pieces {
+                    for (i, block) in piece.block_details().enumerate() {
+                        let mut payload = Vec::<u8>::new();
+                        payload.extend_from_slice(&(i as u32).to_be_bytes());
+                        payload.extend_from_slice(&block.0.to_be_bytes());
+                        payload.extend_from_slice(&block.1.to_be_bytes());
+
+                        let request_message = PeerMessage {
+                            id: PeerMessageId::Request,
+                            payload,
+                        };
+
+                        if let Err(err) = request_message.send(stream).await {
+                            anyhow::bail!("Error sending request message: {}", err);
+                        }
+                    }
+                }
+
+                Ok(())
             }
             PeerMessageId::Piece => {
-                todo!();
+                let piece_index = u32::from_be_bytes(self.payload[0..4].try_into()?) as usize;
+                let begin_index = u32::from_be_bytes(self.payload[4..8].try_into()?) as usize;
+                let block = self.payload[8..].to_vec();
+
+                file_info.pieces[piece_index].update_block(begin_index, block);
+
+                Ok(())
             }
             _ => Ok(()),
         }

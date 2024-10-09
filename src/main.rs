@@ -1,13 +1,10 @@
 use bittorrent_starter_rust::{
     bencode,
     peers::{self, PeerMessage},
-    Torrent,
+    FileInfo, Torrent,
 };
 use clap::{Parser, Subcommand};
-use tokio::{
-    // io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-};
+use tokio::net::TcpStream;
 
 #[derive(Clone, Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -85,13 +82,42 @@ async fn main() {
             }
         }
         Commands::DownloadPiece {
-            output_path: _output_path,
+            output_path,
             file_path,
-            piece_index: _piece_index,
+            piece_index,
         } => {
             let torrent = Torrent::from_file(file_path).unwrap();
+
+            if *piece_index >= torrent.piece_hashes.len() {
+                eprintln!("Invalid piece index");
+                std::process::exit(1);
+            }
+
+            // Forcibly remove all the pieces except the one we want to download.
+            let piece_hash = torrent.piece_hashes[*piece_index].clone();
+            let last_piece_index = torrent.piece_hashes.len() - 1;
+
+            let length = match piece_index {
+                i if *i == last_piece_index => {
+                    torrent.length
+                        - ((torrent.piece_hashes.len() as i64 - 1) * torrent.piece_length)
+                }
+                _ => torrent.piece_length,
+            };
+
+            let torrent = Torrent {
+                announce: torrent.announce.clone(),
+                length,
+                hash: torrent.hash,
+                piece_length: torrent.piece_length,
+                piece_hashes: vec![piece_hash],
+            };
+
             let torrent_peers = peers::fetch_peers(&torrent).unwrap();
             let peer_ip = torrent_peers[0];
+
+            let output_path = output_path.clone().unwrap_or("/tmp/output".to_string());
+            let mut file_info = FileInfo::new(output_path, &torrent);
 
             let mut stream = match TcpStream::connect(peer_ip).await {
                 Ok(stream) => stream,
@@ -101,15 +127,23 @@ async fn main() {
                 }
             };
 
-            println!("Handshake completed with peer: {}", peer_ip);
-
             while let Ok(message) = PeerMessage::read(&mut stream).await {
                 println!("Message received: {:?}", message);
 
-                if let Err(err) = message.process(&mut stream).await {
+                if let Err(err) = message.process(&mut stream, &mut file_info).await {
                     eprintln!("Error processing message: {}", err);
                     std::process::exit(1);
                 }
+
+                // TODO: probably a more performant way to handle this
+                if file_info.is_complete() {
+                    break;
+                }
+            }
+
+            if let Err(err) = file_info.save_to_disk().await {
+                eprintln!("Unable to save file to disk: {}", err);
+                std::process::exit(1);
             }
         }
     }

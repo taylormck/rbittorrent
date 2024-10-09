@@ -1,5 +1,5 @@
+use crate::calculate_hash;
 use serde_bencode::value::Value as BValue;
-use sha1::{Digest, Sha1};
 use std::fs;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,12 +65,6 @@ impl Torrent {
             piece_hashes,
         })
     }
-}
-
-fn calculate_hash(input: &[u8]) -> String {
-    let mut hasher = Sha1::new();
-    hasher.update(input);
-    format!("{:x}", hasher.finalize())
 }
 
 #[cfg(test)]

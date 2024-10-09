@@ -6,3 +6,4 @@ pub use shake_hands::shake_hands;
 
 mod peer_message;
 pub use peer_message::PeerMessage;
+pub use peer_message::PeerMessageId;
