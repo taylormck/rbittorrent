@@ -21,7 +21,7 @@ impl FileInfo {
             n => n as usize,
         };
 
-        let last_index = torrent.piece_hashes.len();
+        let last_index = torrent.piece_hashes.len() - 1;
 
         let pieces = torrent
             .piece_hashes
