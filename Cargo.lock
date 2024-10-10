@@ -147,6 +147,7 @@ dependencies = [
  "hex",
  "mockito",
  "num_enum",
+ "rand",
  "regex",
  "reqwest",
  "serde",

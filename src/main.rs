@@ -1,6 +1,6 @@
 use bittorrent_starter_rust::{
     bencode,
-    peers::{self, PeerMessage},
+    peers::{self, generate_peer_id, PeerMessage},
     FileInfo, Torrent,
 };
 use clap::{Parser, Subcommand};
@@ -63,12 +63,14 @@ async fn main() {
         }
         Commands::Peers { file_path } => {
             let torrent = Torrent::from_file(file_path).unwrap();
-            let torrent_peers = peers::fetch_peers(&torrent).unwrap();
+            let peer_id = generate_peer_id();
+            let torrent_peers = peers::fetch_peers(&torrent, &peer_id).unwrap();
 
             torrent_peers.iter().for_each(|peer| println!("{}", peer));
         }
         Commands::Handshake { file_path, peer_ip } => {
             let torrent = Torrent::from_file(file_path).unwrap();
+            let peer_id = generate_peer_id();
 
             let mut stream = match TcpStream::connect(peer_ip).await {
                 Ok(stream) => stream,
@@ -78,7 +80,7 @@ async fn main() {
                 }
             };
 
-            match peers::shake_hands(&mut stream, &torrent).await {
+            match peers::shake_hands(&mut stream, &torrent, &peer_id).await {
                 Ok(result) => println!("Peer ID: {}", result),
                 Err(err) => {
                     eprintln!("Error shaking hands: {}", err);
@@ -92,13 +94,14 @@ async fn main() {
             piece_index,
         } => {
             let torrent = Torrent::from_file(file_path).unwrap();
+            let peer_id = generate_peer_id();
 
             if *piece_index >= torrent.piece_hashes.len() {
                 eprintln!("Invalid piece index");
                 std::process::exit(1);
             }
 
-            let torrent_peers = peers::fetch_peers(&torrent).unwrap();
+            let torrent_peers = peers::fetch_peers(&torrent, &peer_id).unwrap();
             let peer_ip = torrent_peers[0];
 
             let output_path = output_path.clone().unwrap_or("/tmp/output".to_string());
@@ -112,7 +115,7 @@ async fn main() {
                 }
             };
 
-            if let Err(err) = peers::shake_hands(&mut stream, &torrent).await {
+            if let Err(err) = peers::shake_hands(&mut stream, &torrent, &peer_id).await {
                 eprintln!("Error shaking hands: {}", err);
                 std::process::exit(1);
             }
@@ -162,8 +165,9 @@ async fn main() {
             file_path,
         } => {
             let torrent = Torrent::from_file(file_path).unwrap();
+            let peer_id = generate_peer_id();
 
-            let torrent_peers = peers::fetch_peers(&torrent).unwrap();
+            let torrent_peers = peers::fetch_peers(&torrent, &peer_id).unwrap();
             let peer_ip = torrent_peers[0];
 
             let output_path = output_path.clone().unwrap_or("/tmp/output".to_string());
@@ -177,7 +181,7 @@ async fn main() {
                 }
             };
 
-            if let Err(err) = peers::shake_hands(&mut stream, &torrent).await {
+            if let Err(err) = peers::shake_hands(&mut stream, &torrent, &peer_id).await {
                 eprintln!("Error shaking hands: {}", err);
                 std::process::exit(1);
             }

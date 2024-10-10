@@ -6,6 +6,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub async fn shake_hands(
     stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
     torrent: &Torrent,
+    peer_id: &str,
 ) -> Result<String> {
     let mut handshake = Vec::<u8>::new();
 
@@ -21,7 +22,7 @@ pub async fn shake_hands(
     handshake.extend_from_slice(&hash);
 
     // Peer ID
-    handshake.extend_from_slice("00112233445566778899".as_bytes());
+    handshake.extend_from_slice(peer_id.as_bytes());
 
     let mut buffer = [0_u8; 68];
 
@@ -74,7 +75,7 @@ mod tests {
 
         let output_buffer = Vec::<u8>::new();
         let mut cursor = Cursor::new(output_buffer);
-        let _handshake_future = shake_hands(&mut cursor, &torrent);
+        let _handshake_future = shake_hands(&mut cursor, &torrent, peer_id);
 
         // let mut input_buffer = Vec::<u8>::with_capacity(68);
         // let result = handshake_future.await.unwrap();

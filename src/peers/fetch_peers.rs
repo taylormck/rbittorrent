@@ -6,12 +6,11 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
 };
 
-pub fn fetch_peers(torrent: &Torrent) -> Result<Vec<SocketAddrV4>> {
+pub fn fetch_peers(torrent: &Torrent, peer_id: &str) -> Result<Vec<SocketAddrV4>> {
     // This may look scary, but all it does is stick a '%' in between
     // every pair of characters.
     let info_hash = prepare_hash(&torrent.hash);
 
-    let peer_id = "00112233445566778899";
     let port = 6881;
     let uploaded = 0;
     let downloaded = 0;
@@ -139,7 +138,7 @@ mod tests {
             .with_body(response_body)
             .create();
 
-        let actual_peers = fetch_peers(&torrent).unwrap();
+        let actual_peers = fetch_peers(&torrent, &peer_id).unwrap();
 
         mock.assert();
         assert_eq!(expected_peers, actual_peers);
