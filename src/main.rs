@@ -98,10 +98,7 @@ async fn main() {
             let last_piece_index = torrent.piece_hashes.len() - 1;
 
             let length = match piece_index {
-                i if *i == last_piece_index => {
-                    torrent.length
-                        - ((torrent.piece_hashes.len() as i64 - 1) * torrent.piece_length)
-                }
+                i if *i == last_piece_index => torrent.length % torrent.piece_length,
                 _ => torrent.piece_length,
             };
 
@@ -127,8 +124,27 @@ async fn main() {
                 }
             };
 
-            while let Ok(message) = PeerMessage::read(&mut stream).await {
-                println!("Message received: {:?}", message);
+            eprintln!("Shaking hands...");
+            match peers::shake_hands(&mut stream, &torrent).await {
+                Ok(result) => eprintln!("Peer ID: {}", result),
+                Err(err) => {
+                    eprintln!("Error shaking hands: {}", err);
+                    std::process::exit(1);
+                }
+            }
+
+            eprintln!("Starting download...");
+            loop {
+                let message = PeerMessage::read(&mut stream).await;
+
+                if let Err(err) = message {
+                    eprintln!("Error reading message: {}", err);
+                    std::process::exit(1);
+                }
+
+                let message = message.unwrap();
+
+                eprintln!("Message received: {:?}", message.id);
 
                 if let Err(err) = message.process(&mut stream, &mut file_info).await {
                     eprintln!("Error processing message: {}", err);

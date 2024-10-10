@@ -5,6 +5,7 @@ use tokio::{fs::File, io::AsyncWriteExt};
 
 const BLOCK_SIZE: usize = 16384; // 16 * 1024
 
+#[derive(Clone, Debug)]
 pub struct FileInfo {
     path: String,
     pub pieces: Vec<Piece>,
@@ -15,6 +16,8 @@ impl FileInfo {
         let pieces = torrent
             .piece_hashes
             .iter()
+            // TODO: the last piece may be shorter than torrent.piece_length,
+            // so we need to compensate for that.
             .map(|hash| Piece::new(torrent.piece_length as usize, hash))
             .collect();
 
@@ -48,6 +51,7 @@ impl FileInfo {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Piece {
     hash: String,
     data: Vec<u8>,
@@ -56,8 +60,13 @@ pub struct Piece {
 
 impl Piece {
     pub fn new(length: usize, hash: &str) -> Self {
-        let data = Vec::with_capacity(length);
-        let num_blocks = length / BLOCK_SIZE;
+        let data = vec![0_u8; length];
+
+        let num_blocks = match length % BLOCK_SIZE {
+            0 => length / BLOCK_SIZE,
+            _ => length / BLOCK_SIZE + 1,
+        };
+
         let completed = vec![false; num_blocks];
 
         Self {
@@ -68,10 +77,9 @@ impl Piece {
     }
 
     pub fn block_details(&self) -> impl Iterator<Item = (u32, u32)> {
-        let mut index = 0;
-
         // NOTE: We copy the length here to avoid borrowing self in the closure.
         let length = self.data.len();
+        let mut index = 0;
 
         from_fn(move || {
             let result;
@@ -100,7 +108,6 @@ impl Piece {
     }
 
     pub fn is_valid(&self) -> bool {
-        // calculate_hash(&self.data) == self.hash
-        true
+        calculate_hash(&self.data) == self.hash
     }
 }
