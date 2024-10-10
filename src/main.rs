@@ -36,6 +36,11 @@ enum Commands {
         file_path: String,
         piece_index: usize,
     },
+    Download {
+        #[arg(short, long = "out")]
+        output_path: Option<String>,
+        file_path: String,
+    },
 }
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
@@ -148,6 +153,57 @@ async fn main() {
             let mut file = File::create(output_path).await.unwrap();
 
             if let Err(err) = piece.write(&mut file).await {
+                eprintln!("Unable to save file to disk: {}", err);
+                std::process::exit(1);
+            }
+        }
+        Commands::Download {
+            output_path,
+            file_path,
+        } => {
+            let torrent = Torrent::from_file(file_path).unwrap();
+
+            let torrent_peers = peers::fetch_peers(&torrent).unwrap();
+            let peer_ip = torrent_peers[0];
+
+            let output_path = output_path.clone().unwrap_or("/tmp/output".to_string());
+            let mut file_info = FileInfo::new(output_path.clone(), &torrent);
+
+            let mut stream = match TcpStream::connect(peer_ip).await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    eprintln!("Error connecting to peer: {}", err);
+                    std::process::exit(1);
+                }
+            };
+
+            if let Err(err) = peers::shake_hands(&mut stream, &torrent).await {
+                eprintln!("Error shaking hands: {}", err);
+                std::process::exit(1);
+            }
+
+            loop {
+                let message = PeerMessage::read(&mut stream).await;
+
+                if let Err(err) = message {
+                    eprintln!("Error reading message: {}", err);
+                    std::process::exit(1);
+                }
+
+                let message = message.unwrap();
+
+                if let Err(err) = message.process(&mut stream, &mut file_info).await {
+                    eprintln!("Error processing message: {}", err);
+                    std::process::exit(1);
+                }
+
+                // TODO: probably a more performant way to handle this
+                if file_info.is_complete() {
+                    break;
+                }
+            }
+
+            if let Err(err) = file_info.save_to_disk().await {
                 eprintln!("Unable to save file to disk: {}", err);
                 std::process::exit(1);
             }
