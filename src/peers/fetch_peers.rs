@@ -138,7 +138,7 @@ mod tests {
             .with_body(response_body)
             .create();
 
-        let actual_peers = fetch_peers(&torrent, &peer_id).unwrap();
+        let actual_peers = fetch_peers(&torrent, peer_id).unwrap();
 
         mock.assert();
         assert_eq!(expected_peers, actual_peers);
