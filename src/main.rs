@@ -124,16 +124,11 @@ async fn main() {
                 }
             };
 
-            eprintln!("Shaking hands...");
-            match peers::shake_hands(&mut stream, &torrent).await {
-                Ok(result) => eprintln!("Peer ID: {}", result),
-                Err(err) => {
-                    eprintln!("Error shaking hands: {}", err);
-                    std::process::exit(1);
-                }
+            if let Err(err) = peers::shake_hands(&mut stream, &torrent).await {
+                eprintln!("Error shaking hands: {}", err);
+                std::process::exit(1);
             }
 
-            eprintln!("Starting download...");
             loop {
                 let message = PeerMessage::read(&mut stream).await;
 
@@ -143,8 +138,6 @@ async fn main() {
                 }
 
                 let message = message.unwrap();
-
-                eprintln!("Message received: {:?}", message.id);
 
                 if let Err(err) = message.process(&mut stream, &mut file_info).await {
                     eprintln!("Error processing message: {}", err);

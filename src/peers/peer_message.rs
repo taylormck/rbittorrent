@@ -11,13 +11,11 @@ pub struct PeerMessage {
 
 impl PeerMessage {
     pub async fn read(stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<Self> {
-        eprintln!("Reading message");
         let mut length_buffer = [0_u8; 4];
         stream.read_exact(&mut length_buffer).await?;
         let length = u32::from_be_bytes(length_buffer);
 
         if length == 0 {
-            eprintln!("Keep-alive message");
             return Ok(Self {
                 id: PeerMessageId::KeepAlive,
                 payload: vec![],
@@ -37,8 +35,6 @@ impl PeerMessage {
     }
 
     pub async fn send(&self, stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<()> {
-        eprintln!("Sending message: {:?}", self);
-
         let mut body = Vec::<u8>::new();
         let length = self.payload.len() as u32 + 1;
         body.extend_from_slice(&length.to_be_bytes());
@@ -62,16 +58,9 @@ impl PeerMessage {
                     payload: Vec::new(),
                 };
 
-                eprintln!(
-                    "Received bitfield message; sending interested message: {:?}",
-                    interested_message
-                );
-
                 interested_message.send(stream).await
             }
             PeerMessageId::Unchoke => {
-                eprintln!("Received unchoke message");
-
                 let requests = file_info
                     .pieces
                     .iter()
@@ -82,13 +71,11 @@ impl PeerMessage {
                         piece
                             .block_details()
                             .map(move |(block_index, block_size)| {
-                                eprintln!("hi there: {} - {}", block_index, block_size);
                                 (piece_index, block_index, block_size)
                             })
                             .collect::<Vec<(u32, u32, u32)>>()
                     })
                     .map(|(piece_index, block_index, block_size)| {
-                        dbg!(block_index, block_size);
                         let mut payload = Vec::<u8>::new();
                         payload.extend_from_slice(&piece_index.to_be_bytes());
                         payload.extend_from_slice(&block_index.to_be_bytes());
@@ -102,8 +89,6 @@ impl PeerMessage {
 
                 // TODO: we might want to limit these to ~5 at a time.
                 for request in requests {
-                    eprintln!("Requesting block: {:?}", request);
-
                     if let Err(err) = request.send(stream).await {
                         anyhow::bail!("Error sending request message: {}", err);
                     }

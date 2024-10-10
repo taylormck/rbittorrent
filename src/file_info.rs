@@ -13,12 +13,28 @@ pub struct FileInfo {
 
 impl FileInfo {
     pub fn new(path: String, torrent: &Torrent) -> Self {
+        // If our piece size divides evenly into the length, then the last piece
+        // will be the same size as the others.
+        // Otherwise, the last piece will only be the remaining size.
+        let remainder_memory = match torrent.length % torrent.piece_length {
+            0 => torrent.piece_length as usize,
+            n => n as usize,
+        };
+
+        let last_index = torrent.piece_hashes.len();
+
         let pieces = torrent
             .piece_hashes
             .iter()
-            // TODO: the last piece may be shorter than torrent.piece_length,
-            // so we need to compensate for that.
-            .map(|hash| Piece::new(torrent.piece_length as usize, hash))
+            .enumerate()
+            .map(|(i, hash)| {
+                let length = match i == last_index {
+                    true => remainder_memory,
+                    false => torrent.piece_length as usize,
+                };
+
+                Piece::new(length, hash)
+            })
             .collect();
 
         Self { path, pieces }
