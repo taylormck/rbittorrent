@@ -1,12 +1,7 @@
-use crate::{calculate_hash, Torrent};
+use crate::{Piece, Torrent};
 use anyhow::Result;
-use std::iter::{from_fn, Iterator};
-use tokio::{
-    fs::File,
-    io::{AsyncWrite, AsyncWriteExt},
-};
-
-const BLOCK_SIZE: usize = 16384; // 16 * 1024
+use std::iter::Iterator;
+use tokio::fs::File;
 
 #[derive(Clone, Debug)]
 pub struct FileInfo {
@@ -68,72 +63,6 @@ impl FileInfo {
             }
         }
 
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Piece {
-    hash: String,
-    pub data: Vec<u8>,
-    completed: Vec<bool>,
-}
-
-impl Piece {
-    pub fn new(length: usize, hash: &str) -> Self {
-        let data = vec![0_u8; length];
-
-        let num_blocks = match length % BLOCK_SIZE {
-            0 => length / BLOCK_SIZE,
-            _ => length / BLOCK_SIZE + 1,
-        };
-
-        let completed = vec![false; num_blocks];
-
-        Self {
-            data,
-            completed,
-            hash: hash.to_string(),
-        }
-    }
-
-    pub fn block_details(&self) -> impl Iterator<Item = (u32, u32)> {
-        // NOTE: We copy the length here to avoid borrowing self in the closure.
-        let length = self.data.len();
-        let mut index = 0;
-
-        from_fn(move || {
-            let result;
-
-            if index < length {
-                let block_size = usize::min(BLOCK_SIZE, length - index);
-                result = Some((index as u32, block_size as u32));
-                index += block_size;
-            } else {
-                result = None;
-            }
-
-            result
-        })
-    }
-
-    pub fn update_block(&mut self, index: usize, data: Vec<u8>) {
-        self.data.splice(index..index + data.len(), data);
-
-        let completed_index = index / BLOCK_SIZE;
-        self.completed[completed_index] = true;
-    }
-
-    pub fn is_complete(&self) -> bool {
-        self.completed.iter().all(|b| *b)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        calculate_hash(&self.data) == self.hash
-    }
-
-    pub async fn write(&self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
-        stream.write_all(&self.data).await?;
         Ok(())
     }
 }

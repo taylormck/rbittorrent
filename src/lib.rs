@@ -9,7 +9,9 @@ pub use ip_address::IpAddress;
 
 mod file_info;
 pub use file_info::FileInfo;
-pub use file_info::Piece;
+
+mod piece;
+pub use piece::Piece;
 
 mod hash;
 pub use hash::calculate_hash;
