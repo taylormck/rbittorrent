@@ -44,7 +44,6 @@ pub async fn shake_hands(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
 
     #[tokio::test]
     async fn test_shake_hands() {
@@ -73,13 +72,13 @@ mod tests {
         let peer_id = "00112233445566778899";
         handshake.extend_from_slice(peer_id.as_bytes());
 
-        let output_buffer = Vec::<u8>::new();
-        let mut cursor = Cursor::new(output_buffer);
-        let _handshake_future = shake_hands(&mut cursor, &torrent, peer_id);
+        let mut stream = tokio_test::io::Builder::new()
+            .read(&handshake.clone())
+            .write(&handshake)
+            .build();
 
-        // let mut input_buffer = Vec::<u8>::with_capacity(68);
-        // let result = handshake_future.await.unwrap();
-        //
-        // assert_eq!(result, hex::encode(peer_id));
+        let returned_peer_id = shake_hands(&mut stream, &torrent, peer_id).await.unwrap();
+
+        assert_eq!(returned_peer_id, hex::encode(peer_id));
     }
 }

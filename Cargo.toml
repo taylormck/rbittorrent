@@ -43,3 +43,4 @@ tokio = { version = "1.23.0", features = ["full"] } # async http requests
 
 [dev-dependencies]
 mockito = "1.5.0"
+tokio-test = "0.4.4"
