@@ -1,7 +1,10 @@
 use crate::{calculate_hash, Torrent};
 use anyhow::Result;
 use std::iter::{from_fn, Iterator};
-use tokio::{fs::File, io::AsyncWriteExt};
+use tokio::{
+    fs::File,
+    io::{AsyncWrite, AsyncWriteExt},
+};
 
 const BLOCK_SIZE: usize = 16384; // 16 * 1024
 
@@ -49,8 +52,6 @@ impl FileInfo {
     }
 
     pub async fn save_to_disk(&self) -> Result<()> {
-        let mut file = File::create(&self.path).await?;
-
         if !self.is_complete() {
             anyhow::bail!("Not all file pieces are complete!");
         }
@@ -59,8 +60,12 @@ impl FileInfo {
             anyhow::bail!("Not all file pieces are valid!");
         }
 
-        if let Err(err) = file.write_all(&self.pieces[0].data).await {
-            anyhow::bail!("Error writing file: {}", err);
+        let mut file = File::create(&self.path).await?;
+
+        for piece in &self.pieces {
+            if let Err(err) = piece.write(&mut file).await {
+                anyhow::bail!("Error writing file: {}", err);
+            }
         }
 
         Ok(())
@@ -70,7 +75,7 @@ impl FileInfo {
 #[derive(Clone, Debug)]
 pub struct Piece {
     hash: String,
-    data: Vec<u8>,
+    pub data: Vec<u8>,
     completed: Vec<bool>,
 }
 
@@ -125,5 +130,10 @@ impl Piece {
 
     pub fn is_valid(&self) -> bool {
         calculate_hash(&self.data) == self.hash
+    }
+
+    pub async fn write(&self, stream: &mut (impl AsyncWrite + Unpin)) -> Result<()> {
+        stream.write_all(&self.data).await?;
+        Ok(())
     }
 }

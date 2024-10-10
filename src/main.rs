@@ -4,7 +4,7 @@ use bittorrent_starter_rust::{
     FileInfo, Torrent,
 };
 use clap::{Parser, Subcommand};
-use tokio::net::TcpStream;
+use tokio::{fs::File, net::TcpStream};
 
 #[derive(Clone, Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -93,28 +93,11 @@ async fn main() {
                 std::process::exit(1);
             }
 
-            // Forcibly remove all the pieces except the one we want to download.
-            let piece_hash = torrent.piece_hashes[*piece_index].clone();
-            let last_piece_index = torrent.piece_hashes.len() - 1;
-
-            let length = match piece_index {
-                i if *i == last_piece_index => torrent.length % torrent.piece_length,
-                _ => torrent.piece_length,
-            };
-
-            let torrent = Torrent {
-                announce: torrent.announce.clone(),
-                length,
-                hash: torrent.hash,
-                piece_length: torrent.piece_length,
-                piece_hashes: vec![piece_hash],
-            };
-
             let torrent_peers = peers::fetch_peers(&torrent).unwrap();
             let peer_ip = torrent_peers[0];
 
             let output_path = output_path.clone().unwrap_or("/tmp/output".to_string());
-            let mut file_info = FileInfo::new(output_path, &torrent);
+            let mut file_info = FileInfo::new(output_path.clone(), &torrent);
 
             let mut stream = match TcpStream::connect(peer_ip).await {
                 Ok(stream) => stream,
@@ -150,7 +133,21 @@ async fn main() {
                 }
             }
 
-            if let Err(err) = file_info.save_to_disk().await {
+            let piece = &file_info.pieces[*piece_index];
+
+            if !piece.is_complete() {
+                eprintln!("Piece is not complete");
+                std::process::exit(1);
+            }
+
+            if !piece.is_valid() {
+                eprintln!("Piece is not valid");
+                std::process::exit(1);
+            }
+
+            let mut file = File::create(output_path).await.unwrap();
+
+            if let Err(err) = piece.write(&mut file).await {
                 eprintln!("Unable to save file to disk: {}", err);
                 std::process::exit(1);
             }

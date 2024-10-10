@@ -1,6 +1,7 @@
 use crate::FileInfo;
 use anyhow::Result;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::fmt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Debug)]
@@ -58,7 +59,7 @@ impl PeerMessage {
                     payload: Vec::new(),
                 };
 
-                interested_message.send(stream).await
+                interested_message.send(stream).await?;
             }
             PeerMessageId::Unchoke => {
                 let requests = file_info
@@ -89,24 +90,21 @@ impl PeerMessage {
 
                 // TODO: we might want to limit these to ~5 at a time.
                 for request in requests {
-                    if let Err(err) = request.send(stream).await {
-                        anyhow::bail!("Error sending request message: {}", err);
-                    }
+                    request.send(stream).await?;
                 }
-
-                Ok(())
             }
             PeerMessageId::Piece => {
                 let piece_index = u32::from_be_bytes(self.payload[0..4].try_into()?) as usize;
-                let begin_index = u32::from_be_bytes(self.payload[4..8].try_into()?) as usize;
-                let block = self.payload[8..].to_vec();
+                let block_index = u32::from_be_bytes(self.payload[4..8].try_into()?) as usize;
+                let block_data = self.payload[8..].to_vec();
 
-                file_info.pieces[piece_index].update_block(begin_index, block);
-
-                Ok(())
+                file_info.pieces[piece_index].update_block(block_index, block_data);
             }
-            _ => Ok(()),
+            PeerMessageId::KeepAlive => {}
+            _ => anyhow::bail!("Unimplemented message type: {}", self.id),
         }
+
+        Ok(())
     }
 }
 
@@ -123,4 +121,10 @@ pub enum PeerMessageId {
     Piece = 7,
     Cancel = 8,
     KeepAlive,
+}
+
+impl fmt::Display for PeerMessageId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
