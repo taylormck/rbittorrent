@@ -1,7 +1,7 @@
 use bittorrent_starter_rust::{
     bencode,
     peers::{self, generate_peer_id, PeerMessage},
-    FileInfo, Torrent,
+    FileInfo, MagnetLink, Torrent,
 };
 use clap::{Parser, Subcommand};
 use tokio::{fs::File, net::TcpStream};
@@ -40,6 +40,9 @@ enum Commands {
         #[arg(short, long = "out")]
         output_path: Option<String>,
         file_path: String,
+    },
+    MagnetParse {
+        magnet_link: String,
     },
 }
 
@@ -211,6 +214,12 @@ async fn main() {
                 eprintln!("Unable to save file to disk: {}", err);
                 std::process::exit(1);
             }
+        }
+        Commands::MagnetParse { magnet_link } => {
+            let magnet_link: MagnetLink = magnet_link.parse().unwrap();
+
+            println!("Tracker URL: {}", magnet_link.tracker_url);
+            println!("Info Hash: {}", magnet_link.hash);
         }
     }
 }

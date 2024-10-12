@@ -15,3 +15,6 @@ pub use piece::Piece;
 
 mod hash;
 pub use hash::calculate_hash;
+
+mod magnet_link;
+pub use magnet_link::MagnetLink;
