@@ -104,4 +104,52 @@ mod tests {
 
         assert_eq!(returned_peer_id, hex::encode(peer_id));
     }
+
+    #[tokio::test]
+    async fn test_shake_hands_with_extensions() {
+        let torrent = Torrent {
+            announce: "fake-url/announce".to_string(),
+            length: 1337,
+            hash: hex::encode("12345678901234567890"),
+            piece_length: 0,
+            piece_hashes: Vec::<String>::new(),
+        };
+
+        let mut handshake = Vec::<u8>::new();
+
+        // Standard header
+        handshake.push(u8::to_be(19));
+        handshake.extend_from_slice(b"BitTorrent protocol");
+
+        // Placeholder bytes
+        handshake.extend_from_slice(
+            &HandshakeReservedBytes::ExtensionsEnabled
+                .bits()
+                .to_be_bytes(),
+        );
+
+        // Hash
+        let hash = hex::decode(&torrent.hash).unwrap();
+        handshake.extend_from_slice(&hash);
+
+        // Peer ID
+        let peer_id = "00112233445566778899";
+        handshake.extend_from_slice(peer_id.as_bytes());
+
+        let mut stream = tokio_test::io::Builder::new()
+            .read(&handshake.clone())
+            .write(&handshake)
+            .build();
+
+        let returned_peer_id = shake_hands(
+            &mut stream,
+            &torrent,
+            peer_id,
+            HandshakeReservedBytes::ExtensionsEnabled,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(returned_peer_id, hex::encode(peer_id));
+    }
 }
