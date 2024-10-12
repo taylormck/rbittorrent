@@ -1,5 +1,7 @@
 use crate::Torrent;
 use anyhow::Result;
+use bitflags::bitflags;
+use core::fmt;
 use std::marker::Unpin;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -7,6 +9,7 @@ pub async fn shake_hands(
     stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
     torrent: &Torrent,
     peer_id: &str,
+    reserved_bytes: HandshakeReservedBytes,
 ) -> Result<String> {
     let mut handshake = Vec::<u8>::new();
 
@@ -14,8 +17,8 @@ pub async fn shake_hands(
     handshake.push(u8::to_be(19));
     handshake.extend_from_slice(b"BitTorrent protocol");
 
-    // Placeholder bytes
-    handshake.extend_from_slice(&[0_u8; 8]);
+    // Reserved bytes
+    handshake.extend_from_slice(&reserved_bytes.bits().to_be_bytes());
 
     // Hash
     let hash = hex::decode(&torrent.hash)?;
@@ -39,6 +42,19 @@ pub async fn shake_hands(
     }
 
     Ok(hex::encode(&buffer[48..68]))
+}
+
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct HandshakeReservedBytes: u64 {
+        const ExtensionsEnabled = 1 << 20;
+    }
+}
+
+impl fmt::Display for HandshakeReservedBytes {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:64b}", self.bits())
+    }
 }
 
 #[cfg(test)]
@@ -77,7 +93,14 @@ mod tests {
             .write(&handshake)
             .build();
 
-        let returned_peer_id = shake_hands(&mut stream, &torrent, peer_id).await.unwrap();
+        let returned_peer_id = shake_hands(
+            &mut stream,
+            &torrent,
+            peer_id,
+            HandshakeReservedBytes::empty(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(returned_peer_id, hex::encode(peer_id));
     }

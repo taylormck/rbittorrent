@@ -1,6 +1,6 @@
 use bittorrent_starter_rust::{
     bencode,
-    peers::{self, generate_peer_id, PeerMessage},
+    peers::{self, generate_peer_id, HandshakeReservedBytes, PeerMessage},
     FileInfo, MagnetLink, Torrent,
 };
 use clap::{Parser, Subcommand};
@@ -44,6 +44,9 @@ enum Commands {
     MagnetParse {
         magnet_link: String,
     },
+    MagnetHandshake {
+        magnet_link: String,
+    },
 }
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
@@ -83,7 +86,14 @@ async fn main() {
                 }
             };
 
-            match peers::shake_hands(&mut stream, &torrent, &peer_id).await {
+            match peers::shake_hands(
+                &mut stream,
+                &torrent,
+                &peer_id,
+                HandshakeReservedBytes::empty(),
+            )
+            .await
+            {
                 Ok(result) => println!("Peer ID: {}", result),
                 Err(err) => {
                     eprintln!("Error shaking hands: {}", err);
@@ -118,7 +128,14 @@ async fn main() {
                 }
             };
 
-            if let Err(err) = peers::shake_hands(&mut stream, &torrent, &peer_id).await {
+            if let Err(err) = peers::shake_hands(
+                &mut stream,
+                &torrent,
+                &peer_id,
+                HandshakeReservedBytes::empty(),
+            )
+            .await
+            {
                 eprintln!("Error shaking hands: {}", err);
                 std::process::exit(1);
             }
@@ -184,7 +201,14 @@ async fn main() {
                 }
             };
 
-            if let Err(err) = peers::shake_hands(&mut stream, &torrent, &peer_id).await {
+            if let Err(err) = peers::shake_hands(
+                &mut stream,
+                &torrent,
+                &peer_id,
+                HandshakeReservedBytes::empty(),
+            )
+            .await
+            {
                 eprintln!("Error shaking hands: {}", err);
                 std::process::exit(1);
             }
@@ -220,6 +244,42 @@ async fn main() {
 
             println!("Tracker URL: {}", magnet_link.tracker_url);
             println!("Info Hash: {}", magnet_link.hash);
+        }
+        Commands::MagnetHandshake { magnet_link } => {
+            let magnet_link: MagnetLink = magnet_link.parse().unwrap();
+            let placeholder_torrent = Torrent {
+                hash: magnet_link.hash,
+                announce: magnet_link.tracker_url,
+                length: 999, // fake length to make the peer happy
+                ..Default::default()
+            };
+
+            let peer_id = generate_peer_id();
+            let peers = peers::fetch_peers(&placeholder_torrent, &peer_id).unwrap();
+            let peer_ip = peers[0];
+
+            let mut stream = match TcpStream::connect(peer_ip).await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    eprintln!("Error connecting to peer: {}", err);
+                    std::process::exit(1);
+                }
+            };
+
+            match peers::shake_hands(
+                &mut stream,
+                &placeholder_torrent,
+                &peer_id,
+                HandshakeReservedBytes::ExtensionsEnabled,
+            )
+            .await
+            {
+                Ok(result) => println!("Peer ID: {}", result),
+                Err(err) => {
+                    eprintln!("Error shaking hands: {}", err);
+                    std::process::exit(1);
+                }
+            }
         }
     }
 }

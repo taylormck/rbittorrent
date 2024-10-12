@@ -2,7 +2,7 @@ use crate::calculate_hash;
 use serde_bencode::value::Value as BValue;
 use std::fs;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Torrent {
     pub announce: String,
     pub length: i64,
@@ -15,10 +15,10 @@ impl Torrent {
     pub fn from_file(path: &str) -> Result<Self, serde_bencode::Error> {
         let contents = fs::read(path).expect("Failed to read file.");
 
-        Self::new(&contents)
+        Self::from_bytes(&contents)
     }
 
-    pub fn new(contents: &[u8]) -> Result<Self, serde_bencode::Error> {
+    fn from_bytes(contents: &[u8]) -> Result<Self, serde_bencode::Error> {
         let dict = serde_bencode::from_bytes::<BValue>(contents);
 
         let data = match dict {
@@ -85,7 +85,7 @@ mod tests {
             piece_hashes: vec!["3031323334353637383930313233343536373839".to_string()],
         };
 
-        let actual_torrent = Torrent::new(input.as_bytes()).unwrap();
+        let actual_torrent = Torrent::from_bytes(input.as_bytes()).unwrap();
 
         assert_eq!(expected_torrent, actual_torrent);
     }

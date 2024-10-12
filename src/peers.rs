@@ -3,6 +3,7 @@ pub use fetch_peers::fetch_peers;
 
 mod shake_hands;
 pub use shake_hands::shake_hands;
+pub use shake_hands::HandshakeReservedBytes;
 
 mod peer_message;
 pub use peer_message::PeerMessage;
