@@ -1,8 +1,8 @@
 use bittorrent_starter_rust::{
     bencode,
     peers::{
-        self, generate_peer_id, ExtensionMessage, ExtensionMessageId, HandshakeReservedBytes,
-        MetadataRequestDictionary, PeerMessage, PeerMessageId,
+        self, generate_peer_id, ExtensionMessageDictionary, ExtensionMessageId,
+        HandshakeReservedBytes, PeerMessage, PeerMessageId,
     },
     FileInfo, MagnetLink, Torrent,
 };
@@ -390,7 +390,7 @@ async fn main() {
             };
 
             if let Some(ut_metadata) = extensions.ut_metadata {
-                let dictionary = MetadataRequestDictionary {
+                let dictionary = ExtensionMessageDictionary {
                     msg_type: 0,
                     piece: 0,
                 };

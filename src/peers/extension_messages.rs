@@ -7,7 +7,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[derive(Clone, Debug)]
 pub struct ExtensionMessage {
     pub id: ExtensionMessageId,
-    pub dictionary: MetadataRequestDictionary,
+    pub dictionary: ExtensionMessageDictionary,
 }
 
 impl ExtensionMessage {
@@ -38,7 +38,7 @@ impl fmt::Display for ExtensionMessageId {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct MetadataRequestDictionary {
+pub struct ExtensionMessageDictionary {
     pub msg_type: u32,
     pub piece: u32,
 }
