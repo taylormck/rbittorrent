@@ -1,12 +1,14 @@
 use bittorrent_starter_rust::{
-    bencode,
+    bencode, calculate_hash,
     peers::{
-        self, generate_peer_id, ExtensionMessageDictionary, ExtensionMessageId,
-        HandshakeReservedBytes, PeerMessage, PeerMessageId,
+        self, generate_peer_id, ExtensionMessage, HandshakeReservedBytes, PeerMessage,
+        PeerMessageId,
     },
     FileInfo, MagnetLink, Torrent,
 };
 use clap::{Parser, Subcommand};
+use serde_bencode::value::Value as BValue;
+use std::collections::HashMap;
 use tokio::{fs::File, net::TcpStream};
 
 #[derive(Clone, Debug, Parser)]
@@ -327,7 +329,7 @@ async fn main() {
             let magnet_link: MagnetLink = magnet_link.parse().unwrap();
             let placeholder_torrent = Torrent {
                 hash: magnet_link.hash,
-                announce: magnet_link.tracker_url,
+                announce: magnet_link.tracker_url.clone(),
                 length: 999, // fake length to make the peer happy
                 ..Default::default()
             };
@@ -389,13 +391,11 @@ async fn main() {
                 }
             };
 
-            if let Some(ut_metadata) = extensions.ut_metadata {
-                let dictionary = ExtensionMessageDictionary {
-                    msg_type: 0,
-                    piece: 0,
-                };
+            if let Some(peer_ut_metadata_id) = extensions.ut_metadata {
+                let dictionary =
+                    HashMap::from([("msg_type".to_string(), 0_u8), ("piece".to_string(), 0_u8)]);
 
-                let mut payload = vec![ut_metadata];
+                let mut payload = vec![peer_ut_metadata_id];
                 payload.extend_from_slice(&serde_bencode::to_bytes(&dictionary).unwrap());
 
                 let request_message = PeerMessage {
@@ -408,18 +408,62 @@ async fn main() {
                     std::process::exit(1);
                 }
 
-                // TODO: recieve the metadata message
-                // if let Ok(message) = PeerMessage::read(&mut stream).await {
-                //     let message = match message.id {
-                //         PeerMessageId::Extension => message,
-                //         _ => {
-                //             eprintln!("Unexpected message: {:?}", message);
-                //             std::process::exit(1);
-                //         }
-                //     };
-                //
-                //     let extension_message = ExtensionMessage::from_bytes(&message.payload);
-                // }
+                if let Ok(message) = PeerMessage::read(&mut stream).await {
+                    let message = match message.id {
+                        PeerMessageId::Extension => message,
+                        _ => {
+                            eprintln!("Unexpected message: {:?}", message);
+                            std::process::exit(1);
+                        }
+                    };
+
+                    let extension_message = ExtensionMessage::from_bytes(&message.payload).unwrap();
+                    let metadata_length =
+                        *extension_message.payload.get("total_size").unwrap() as usize;
+
+                    let start_index = message.payload.len() - metadata_length;
+                    let metadata = match serde_bencode::from_bytes(&message.payload[start_index..])
+                    {
+                        Ok(BValue::Dict(dict)) => dict,
+                        _ => {
+                            eprintln!("Invalid metadata");
+                            std::process::exit(1);
+                        }
+                    };
+
+                    let length = match metadata.get("length".as_bytes()) {
+                        Some(BValue::Int(len)) => *len,
+                        _ => panic!("Torrent file does not contain length entry."),
+                    };
+
+                    let piece_length = match metadata.get("piece length".as_bytes()) {
+                        Some(BValue::Int(len)) => *len,
+                        _ => panic!("Torrent file does not contain piece length entry."),
+                    };
+
+                    let pieces = match metadata.get("pieces".as_bytes()) {
+                        Some(BValue::Bytes(bytes)) => bytes,
+                        _ => panic!("Torrent file does not contain pieces entry."),
+                    };
+
+                    let piece_hashes = pieces.chunks(20).map(const_hex::encode).collect();
+
+                    let hash = calculate_hash(&message.payload[start_index..]);
+
+                    let torrent = Torrent {
+                        announce: magnet_link.tracker_url,
+                        length,
+                        piece_length,
+                        piece_hashes,
+                        hash,
+                    };
+
+                    println!("Tracker URL: {}", torrent.announce);
+                    println!("Length: {}", torrent.length);
+                    println!("Info Hash: {}", torrent.hash);
+                    println!("Piece Length: {}", torrent.piece_length);
+                    println!("Piece Hashes: \n{}", torrent.piece_hashes.join("\n"));
+                }
             }
         }
     }

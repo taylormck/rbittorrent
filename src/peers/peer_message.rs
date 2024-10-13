@@ -98,9 +98,6 @@ impl PeerMessage {
 
                 file_info.pieces[piece_index].update_block(block_index, block_data);
             }
-            PeerMessageId::Extension => {
-                todo!();
-            }
             PeerMessageId::KeepAlive => {}
             _ => anyhow::bail!("Unimplemented message type: {}", self.id),
         }

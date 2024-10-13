@@ -15,7 +15,6 @@ pub use peer_message::PeerMessageId;
 
 mod extension_messages;
 pub use extension_messages::ExtensionMessage;
-pub use extension_messages::ExtensionMessageDictionary;
 pub use extension_messages::ExtensionMessageId;
 
 mod generate_peer_id;

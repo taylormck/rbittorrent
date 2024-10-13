@@ -18,7 +18,7 @@ impl Torrent {
         Self::from_bytes(&contents)
     }
 
-    fn from_bytes(contents: &[u8]) -> Result<Self, serde_bencode::Error> {
+    pub fn from_bytes(contents: &[u8]) -> Result<Self, serde_bencode::Error> {
         let dict = serde_bencode::from_bytes::<BValue>(contents);
 
         let data = match dict {
