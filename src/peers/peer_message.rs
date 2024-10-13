@@ -7,7 +7,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[derive(Clone, Debug)]
 pub struct PeerMessage {
     pub id: PeerMessageId,
-    payload: Vec<u8>,
+    pub payload: Vec<u8>,
 }
 
 impl PeerMessage {

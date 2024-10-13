@@ -1,6 +1,9 @@
 use bittorrent_starter_rust::{
     bencode,
-    peers::{self, generate_peer_id, HandshakeReservedBytes, PeerMessage, PeerMessageId},
+    peers::{
+        self, generate_peer_id, ExtensionMessage, ExtensionMessageId, HandshakeReservedBytes,
+        MetadataRequestDictionary, PeerMessage, PeerMessageId,
+    },
     FileInfo, MagnetLink, Torrent,
 };
 use clap::{Parser, Subcommand};
@@ -45,6 +48,9 @@ enum Commands {
         magnet_link: String,
     },
     MagnetHandshake {
+        magnet_link: String,
+    },
+    MagnetInfo {
         magnet_link: String,
     },
 }
@@ -315,6 +321,105 @@ async fn main() {
 
             if let Some(ut_metadata) = extensions.ut_metadata {
                 println!("Peer Metadata Extension ID: {}", ut_metadata);
+            }
+        }
+        Commands::MagnetInfo { magnet_link } => {
+            let magnet_link: MagnetLink = magnet_link.parse().unwrap();
+            let placeholder_torrent = Torrent {
+                hash: magnet_link.hash,
+                announce: magnet_link.tracker_url,
+                length: 999, // fake length to make the peer happy
+                ..Default::default()
+            };
+
+            let peer_id = generate_peer_id();
+            let peers = peers::fetch_peers(&placeholder_torrent, &peer_id).unwrap();
+            let peer_ip = peers[0];
+
+            let mut stream = match TcpStream::connect(peer_ip).await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    eprintln!("Error connecting to peer: {}", err);
+                    std::process::exit(1);
+                }
+            };
+
+            let base_handshake_result = match peers::shake_hands(
+                &mut stream,
+                &placeholder_torrent,
+                &peer_id,
+                HandshakeReservedBytes::ExtensionsEnabled,
+            )
+            .await
+            {
+                Ok(base_handshake_result) => base_handshake_result,
+                Err(err) => {
+                    eprintln!("Error shaking hands: {}", err);
+                    std::process::exit(1);
+                }
+            };
+
+            // Recieve the bitfield message
+            match PeerMessage::read(&mut stream).await {
+                Ok(message) => match message.id {
+                    PeerMessageId::Bitfield => {}
+                    _ => {
+                        eprintln!("Unexpected message: {:?}", message);
+                        std::process::exit(1);
+                    }
+                },
+                Err(err) => {
+                    eprintln!("Error reading bitfield message: {}", err);
+                    std::process::exit(1);
+                }
+            }
+
+            if !base_handshake_result
+                .reserved_bytes
+                .contains(HandshakeReservedBytes::ExtensionsEnabled)
+            {
+                return;
+            }
+
+            let extensions = match peers::shake_hands_extension(&mut stream).await {
+                Ok(extensions) => extensions,
+                Err(err) => {
+                    eprintln!("Error shaking hands for extensions: {}", err);
+                    std::process::exit(1);
+                }
+            };
+
+            if let Some(ut_metadata) = extensions.ut_metadata {
+                let dictionary = MetadataRequestDictionary {
+                    msg_type: 0,
+                    piece: 0,
+                };
+
+                let mut payload = vec![ut_metadata];
+                payload.extend_from_slice(&serde_bencode::to_bytes(&dictionary).unwrap());
+
+                let request_message = PeerMessage {
+                    id: PeerMessageId::Extension,
+                    payload,
+                };
+
+                if let Err(err) = request_message.send(&mut stream).await {
+                    eprintln!("Error sending request: {}", err);
+                    std::process::exit(1);
+                }
+
+                // TODO: recieve the metadata message
+                // if let Ok(message) = PeerMessage::read(&mut stream).await {
+                //     let message = match message.id {
+                //         PeerMessageId::Extension => message,
+                //         _ => {
+                //             eprintln!("Unexpected message: {:?}", message);
+                //             std::process::exit(1);
+                //         }
+                //     };
+                //
+                //     let extension_message = ExtensionMessage::from_bytes(&message.payload);
+                // }
             }
         }
     }

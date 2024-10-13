@@ -7,11 +7,11 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[derive(Clone, Debug)]
 pub struct ExtensionMessage {
     pub id: ExtensionMessageId,
-    pub dictionary: ExtensionMessageDictionary,
+    pub dictionary: MetadataRequestDictionary,
 }
 
 impl ExtensionMessage {
-    pub async fn from_bytes(bytes: &[u8]) -> Result<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let id: ExtensionMessageId = u8::from_be(bytes[0]).try_into()?;
         let dictionary = serde_bencode::from_bytes(&bytes[1..])?;
 
@@ -27,7 +27,8 @@ impl ExtensionMessage {
 #[derive(Copy, Clone, Debug, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum ExtensionMessageId {
-    Metadata = 0,
+    MetadataRequest = 0,
+    MetadataResponse = 1,
 }
 
 impl fmt::Display for ExtensionMessageId {
@@ -37,7 +38,7 @@ impl fmt::Display for ExtensionMessageId {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct ExtensionMessageDictionary {
-    msg_type: u32,
-    piece: u32,
+pub struct MetadataRequestDictionary {
+    pub msg_type: u32,
+    pub piece: u32,
 }
