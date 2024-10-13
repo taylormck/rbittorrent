@@ -31,6 +31,12 @@ pub async fn shake_hands(
     stream.write_all(&handshake).await?;
     stream.read_exact(&mut buffer).await?;
 
+    let message_id = u8::from_be(buffer[0]);
+    anyhow::ensure!(message_id == 19, "Invalid message id");
+
+    let protocol = String::from_utf8_lossy(&buffer[1..20]);
+    anyhow::ensure!(protocol == "BitTorrent protocol", "Invalid protocol");
+
     let encoded_peer_id = hex::encode(&buffer[48..68]);
     let reserved_bytes =
         HandshakeReservedBytes::from_bits_truncate(u64::from_be_bytes(buffer[20..28].try_into()?));
@@ -42,7 +48,8 @@ pub async fn shake_hands(
 }
 
 bitflags! {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[repr(transparent)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct HandshakeReservedBytes: u64 {
         const ExtensionsEnabled = 1 << 20;
     }

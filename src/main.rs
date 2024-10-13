@@ -266,48 +266,55 @@ async fn main() {
                 }
             };
 
-            let base_handshake_result = peers::shake_hands(
+            let base_handshake_result = match peers::shake_hands(
                 &mut stream,
                 &placeholder_torrent,
                 &peer_id,
                 HandshakeReservedBytes::ExtensionsEnabled,
             )
-            .await;
+            .await
+            {
+                Ok(base_handshake_result) => base_handshake_result,
+                Err(err) => {
+                    eprintln!("Error shaking hands: {}", err);
+                    std::process::exit(1);
+                }
+            };
 
-            if let Err(err) = base_handshake_result {
-                eprintln!("Error shaking hands: {}", err);
-                std::process::exit(1);
-            }
-
-            let base_handshake_result = base_handshake_result.unwrap();
             println!("Peer ID: {}", base_handshake_result.encoded_peer_id);
 
             // Recieve the bitfield message
-            if let Ok(message) = PeerMessage::read(&mut stream).await {
-                match message.id {
+            match PeerMessage::read(&mut stream).await {
+                Ok(message) => match message.id {
                     PeerMessageId::Bitfield => {}
                     _ => {
                         eprintln!("Unexpected message: {:?}", message);
                         std::process::exit(1);
                     }
+                },
+                Err(err) => {
+                    eprintln!("Error reading bitfield message: {}", err);
+                    std::process::exit(1);
+                }
+            }
+
+            if !base_handshake_result
+                .reserved_bytes
+                .contains(HandshakeReservedBytes::ExtensionsEnabled)
+            {
+                return;
+            }
+
+            let extensions = match peers::shake_hands_extension(&mut stream).await {
+                Ok(extensions) => extensions,
+                Err(err) => {
+                    eprintln!("Error shaking hands for extensions: {}", err);
+                    std::process::exit(1);
                 }
             };
 
-            // NOTE: Is there a better way to check bitflags ?
-            if base_handshake_result.reserved_bytes | HandshakeReservedBytes::ExtensionsEnabled
-                == HandshakeReservedBytes::ExtensionsEnabled
-            {
-                match peers::shake_hands_extension(&mut stream).await {
-                    Ok(extensions) => {
-                        if let Some(ut_metadata) = extensions.ut_metadata {
-                            println!("Peer Metadata Extension ID: {}", ut_metadata);
-                        }
-                    }
-                    Err(err) => {
-                        eprintln!("Error shaking hands for extensions: {}", err);
-                        std::process::exit(1);
-                    }
-                };
+            if let Some(ut_metadata) = extensions.ut_metadata {
+                println!("Peer Metadata Extension ID: {}", ut_metadata);
             }
         }
     }
