@@ -11,22 +11,30 @@ pub struct PeerMessage {
 }
 
 impl PeerMessage {
+    pub fn keep_alive() -> Self {
+        Self {
+            id: PeerMessageId::KeepAlive,
+            payload: vec![],
+        }
+    }
+
+    pub fn interested() -> Self {
+        Self {
+            id: PeerMessageId::Interested,
+            payload: vec![],
+        }
+    }
+
     pub async fn read(stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<Self> {
         let mut length_buffer = [0_u8; 4];
         stream.read_exact(&mut length_buffer).await?;
         let length = u32::from_be_bytes(length_buffer);
 
         if length == 0 {
-            return Ok(Self {
-                id: PeerMessageId::KeepAlive,
-                payload: vec![],
-            });
+            return Ok(Self::keep_alive());
         }
 
-        let mut id_buffer = [0_u8; 1];
-        stream.read_exact(&mut id_buffer).await?;
-
-        let id = u8::from_be_bytes(id_buffer);
+        let id = u8::from_be(stream.read_u8().await?);
         let id = PeerMessageId::try_from(id)?;
 
         let mut payload = vec![0_u8; (length - 1) as usize];
@@ -53,14 +61,7 @@ impl PeerMessage {
         file_info: &mut FileInfo,
     ) -> Result<()> {
         match self.id {
-            PeerMessageId::Bitfield => {
-                let interested_message = PeerMessage {
-                    id: PeerMessageId::Interested,
-                    payload: Vec::new(),
-                };
-
-                interested_message.send(stream).await?;
-            }
+            PeerMessageId::Bitfield => Self::interested().send(stream).await?,
             PeerMessageId::Unchoke => {
                 let requests = file_info
                     .pieces
