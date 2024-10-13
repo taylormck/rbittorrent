@@ -300,7 +300,7 @@ async fn main() {
                 match peers::shake_hands_extension(&mut stream).await {
                     Ok(extensions) => {
                         if let Some(ut_metadata) = extensions.ut_metadata {
-                            println!("Peer Metadata Extension: {}", ut_metadata);
+                            println!("Peer Metadata Extension ID: {}", ut_metadata);
                         }
                     }
                     Err(err) => {
