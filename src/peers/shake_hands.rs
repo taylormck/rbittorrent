@@ -28,17 +28,8 @@ pub async fn shake_hands(
 
     let mut buffer = [0_u8; 68];
 
-    match stream.write(&handshake).await {
-        Ok(68) => {}
-        Ok(num) => anyhow::bail!("Sent {} bytes, expected 68.", num),
-        Err(err) => anyhow::bail!(err),
-    }
-
-    match stream.read(&mut buffer).await {
-        Ok(68) => {}
-        Ok(num) => anyhow::bail!("Received {} bytes, expected 68.", num),
-        Err(err) => anyhow::bail!(err),
-    }
+    stream.write_all(&handshake).await?;
+    stream.read_exact(&mut buffer).await?;
 
     let encoded_peer_id = hex::encode(&buffer[48..68]);
     let reserved_bytes =
