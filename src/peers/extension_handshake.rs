@@ -5,14 +5,16 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 pub async fn shake_hands_extension(
     stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
 ) -> Result<()> {
-    let mut handshake = vec![u8::to_be(20), u8::to_be(0)];
-
     let dictionary = ExtensionDictionary {
-        m: SupportedExtensions { metadata: 1 },
+        m: SupportedExtensions { ut_metadata: 1 },
     };
 
     let payload = serde_bencode::to_bytes(&dictionary).unwrap();
 
+    let mut handshake = Vec::<u8>::new();
+    handshake.extend_from_slice(&u32::to_be_bytes(payload.len() as u32 + 2)[..]);
+    handshake.push(u8::to_be(20));
+    handshake.push(u8::to_be(0));
     handshake.extend_from_slice(&payload);
 
     let expected_bytes = handshake.len();
@@ -26,7 +28,7 @@ pub async fn shake_hands_extension(
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
 struct SupportedExtensions {
-    pub metadata: u8,
+    pub ut_metadata: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
