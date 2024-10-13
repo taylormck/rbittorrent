@@ -1,6 +1,6 @@
 use bittorrent_starter_rust::{
     bencode,
-    peers::{self, generate_peer_id, HandshakeReservedBytes, PeerMessage},
+    peers::{self, generate_peer_id, HandshakeReservedBytes, PeerMessage, PeerMessageId},
     FileInfo, MagnetLink, Torrent,
 };
 use clap::{Parser, Subcommand};
@@ -94,7 +94,7 @@ async fn main() {
             )
             .await
             {
-                Ok(result) => println!("Peer ID: {}", result),
+                Ok(result) => println!("Peer ID: {}", result.encoded_peer_id),
                 Err(err) => {
                     eprintln!("Error shaking hands: {}", err);
                     std::process::exit(1);
@@ -266,17 +266,39 @@ async fn main() {
                 }
             };
 
-            match peers::shake_hands(
+            let base_handshake_result = peers::shake_hands(
                 &mut stream,
                 &placeholder_torrent,
                 &peer_id,
                 HandshakeReservedBytes::ExtensionsEnabled,
             )
-            .await
+            .await;
+
+            if let Err(err) = base_handshake_result {
+                eprintln!("Error shaking hands: {}", err);
+                std::process::exit(1);
+            }
+
+            let base_handshake_result = base_handshake_result.unwrap();
+            println!("Peer ID: {}", base_handshake_result.encoded_peer_id);
+
+            // Recieve the bitfield message
+            if let Ok(message) = PeerMessage::read(&mut stream).await {
+                match message.id {
+                    PeerMessageId::Bitfield => {}
+                    _ => {
+                        eprintln!("Unexpected message: {:?}", message);
+                        std::process::exit(1);
+                    }
+                }
+            };
+
+            // NOTE: Is there a better way to check bitflags ?
+            if base_handshake_result.reserved_bytes | HandshakeReservedBytes::ExtensionsEnabled
+                == HandshakeReservedBytes::ExtensionsEnabled
             {
-                Ok(result) => println!("Peer ID: {}", result),
-                Err(err) => {
-                    eprintln!("Error shaking hands: {}", err);
+                if let Err(err) = peers::shake_hands_extension(&mut stream).await {
+                    eprintln!("Error shaking hands for extensions: {}", err);
                     std::process::exit(1);
                 }
             }

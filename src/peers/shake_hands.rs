@@ -10,11 +10,10 @@ pub async fn shake_hands(
     torrent: &Torrent,
     peer_id: &str,
     reserved_bytes: HandshakeReservedBytes,
-) -> Result<String> {
-    let mut handshake = Vec::<u8>::new();
+) -> Result<HandshakeResponse> {
+    let mut handshake = vec![u8::to_be(19)];
 
     // Standard header
-    handshake.push(u8::to_be(19));
     handshake.extend_from_slice(b"BitTorrent protocol");
 
     // Reserved bytes
@@ -41,7 +40,14 @@ pub async fn shake_hands(
         Err(err) => anyhow::bail!(err),
     }
 
-    Ok(hex::encode(&buffer[48..68]))
+    let encoded_peer_id = hex::encode(&buffer[48..68]);
+    let reserved_bytes =
+        HandshakeReservedBytes::from_bits_truncate(u64::from_be_bytes(buffer[20..28].try_into()?));
+
+    Ok(HandshakeResponse {
+        encoded_peer_id,
+        reserved_bytes,
+    })
 }
 
 bitflags! {
@@ -55,6 +61,12 @@ impl fmt::Display for HandshakeReservedBytes {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:64b}", self.bits())
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HandshakeResponse {
+    pub encoded_peer_id: String,
+    pub reserved_bytes: HandshakeReservedBytes,
 }
 
 #[cfg(test)]
@@ -88,12 +100,17 @@ mod tests {
         let peer_id = "00112233445566778899";
         handshake.extend_from_slice(peer_id.as_bytes());
 
+        let expected_response = HandshakeResponse {
+            encoded_peer_id: hex::encode(peer_id),
+            reserved_bytes: HandshakeReservedBytes::empty(),
+        };
+
         let mut stream = tokio_test::io::Builder::new()
             .read(&handshake.clone())
             .write(&handshake)
             .build();
 
-        let returned_peer_id = shake_hands(
+        let actual_response = shake_hands(
             &mut stream,
             &torrent,
             peer_id,
@@ -102,7 +119,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(returned_peer_id, hex::encode(peer_id));
+        assert_eq!(expected_response, actual_response);
     }
 
     #[tokio::test]
@@ -136,12 +153,17 @@ mod tests {
         let peer_id = "00112233445566778899";
         handshake.extend_from_slice(peer_id.as_bytes());
 
+        let expected_response = HandshakeResponse {
+            encoded_peer_id: hex::encode(peer_id),
+            reserved_bytes: HandshakeReservedBytes::ExtensionsEnabled,
+        };
+
         let mut stream = tokio_test::io::Builder::new()
             .read(&handshake.clone())
             .write(&handshake)
             .build();
 
-        let returned_peer_id = shake_hands(
+        let actual_response = shake_hands(
             &mut stream,
             &torrent,
             peer_id,
@@ -150,6 +172,6 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(returned_peer_id, hex::encode(peer_id));
+        assert_eq!(expected_response, actual_response);
     }
 }

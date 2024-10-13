@@ -5,6 +5,10 @@ mod shake_hands;
 pub use shake_hands::shake_hands;
 pub use shake_hands::HandshakeReservedBytes;
 
+mod extension_handshake;
+pub use extension_handshake::shake_hands_extension;
+pub use extension_handshake::SupportedExtensionIds;
+
 mod peer_message;
 pub use peer_message::PeerMessage;
 pub use peer_message::PeerMessageId;
