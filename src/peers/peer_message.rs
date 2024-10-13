@@ -26,18 +26,16 @@ impl PeerMessage {
     }
 
     pub async fn read(stream: &mut (impl AsyncRead + AsyncWrite + Unpin)) -> Result<Self> {
-        let mut length_buffer = [0_u8; 4];
-        stream.read_exact(&mut length_buffer).await?;
-        let length = u32::from_be_bytes(length_buffer);
+        let length = u32::from_be(stream.read_u32().await?) as usize;
 
         if length == 0 {
             return Ok(Self::keep_alive());
         }
 
-        let id = u8::from_be(stream.read_u8().await?);
-        let id = PeerMessageId::try_from(id)?;
+        let id: PeerMessageId = u8::from_be(stream.read_u8().await?).try_into()?;
 
-        let mut payload = vec![0_u8; (length - 1) as usize];
+        // NOTE: We subtract 1 because we've already read the first bit.
+        let mut payload = vec![0_u8; length - 1];
         stream.read_exact(&mut payload).await?;
 
         Ok(Self { id, payload })
