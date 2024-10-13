@@ -297,10 +297,17 @@ async fn main() {
             if base_handshake_result.reserved_bytes | HandshakeReservedBytes::ExtensionsEnabled
                 == HandshakeReservedBytes::ExtensionsEnabled
             {
-                if let Err(err) = peers::shake_hands_extension(&mut stream).await {
-                    eprintln!("Error shaking hands for extensions: {}", err);
-                    std::process::exit(1);
-                }
+                match peers::shake_hands_extension(&mut stream).await {
+                    Ok(extensions) => {
+                        if let Some(ut_metadata) = extensions.ut_metadata {
+                            println!("Peer Metadata Extension: {}", ut_metadata);
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Error shaking hands for extensions: {}", err);
+                        std::process::exit(1);
+                    }
+                };
             }
         }
     }

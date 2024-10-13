@@ -7,7 +7,7 @@ pub use shake_hands::HandshakeReservedBytes;
 
 mod extension_handshake;
 pub use extension_handshake::shake_hands_extension;
-pub use extension_handshake::SupportedExtensionIds;
+pub use extension_handshake::SupportedExtensions;
 
 mod peer_message;
 pub use peer_message::PeerMessage;

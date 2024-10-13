@@ -1,12 +1,12 @@
 use anyhow::Result;
 use serde_derive::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub async fn shake_hands_extension(
     stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
-) -> Result<()> {
+) -> Result<SupportedExtensions> {
     let dictionary = ExtensionDictionary {
-        m: SupportedExtensions { ut_metadata: 1 },
+        m: SupportedExtensions::my_supported(),
     };
 
     let payload = serde_bencode::to_bytes(&dictionary).unwrap();
@@ -19,12 +19,25 @@ pub async fn shake_hands_extension(
 
     stream.write_all(&handshake).await?;
 
-    Ok(())
+    let response_size = stream.read_u32().await?;
+
+    let mut response_buffer = vec![0_u8; response_size as usize];
+    stream.read_exact(&mut response_buffer).await?;
+
+    // NOTE: We don't need these now, but we can leave this commented out
+    // in case we need them in the future.
+    // let message_id = u8::from_be(response_buffer[0]);
+    // let extension_message_id = u8::from_be(response_buffer[1]);
+
+    let response_dictionary: ExtensionDictionary =
+        serde_bencode::from_bytes(&response_buffer[2..])?;
+
+    Ok(response_dictionary.m)
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
-struct SupportedExtensions {
-    pub ut_metadata: u8,
+pub struct SupportedExtensions {
+    pub ut_metadata: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
@@ -32,9 +45,16 @@ struct ExtensionDictionary {
     pub m: SupportedExtensions,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub struct SupportedExtensionIds {
-    metadata: Option<String>,
+impl SupportedExtensions {
+    pub fn all_unsupported() -> Self {
+        Self { ut_metadata: None }
+    }
+
+    pub fn my_supported() -> Self {
+        Self {
+            ut_metadata: Some(1),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -46,7 +66,7 @@ mod test {
     #[tokio::test]
     async fn test_shake_hands_extension() {
         let dictionary = ExtensionDictionary {
-            m: SupportedExtensions { ut_metadata: 1 },
+            m: SupportedExtensions::my_supported(),
         };
 
         let payload = serde_bencode::to_bytes(&dictionary).unwrap();
@@ -59,8 +79,15 @@ mod test {
 
         let mut stream = tokio_test::io::Builder::new()
             .write(&handshake.clone())
+            .read(&handshake)
             .build();
 
-        assert_ok!(shake_hands_extension(&mut stream).await);
+        let expected_extensions = SupportedExtensions::my_supported();
+
+        let actual_extensions = shake_hands_extension(&mut stream).await;
+        assert_ok!(actual_extensions);
+
+        let actual_extensions = actual_extensions.unwrap();
+        assert_eq!(expected_extensions, actual_extensions);
     }
 }
